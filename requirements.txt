@@ -1,0 +1,6 @@
+mcp
+httpx
+pydantic
+uvicorn
+starlette
+python-dotenv
