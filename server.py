@@ -44,7 +44,6 @@ async def iniciar_llamada_whatsapp(phone: str, channel_id: str):
         return response.json()
 
 if __name__ == "__main__":
-    # Configuración ESTRICTA para Render/Railway
     port = int(os.getenv("PORT", 8000))
-    # Es obligatorio definir host="0.0.0.0" para que la nube lo detecte
-    mcp.run(transport="sse", host="0.0.0.0", port=port)
+    # Eliminamos el argumento host que causaba el conflicto
+    mcp.run(transport="sse", port=port)
