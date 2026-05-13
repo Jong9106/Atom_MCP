@@ -46,11 +46,21 @@ async def iniciar_llamada_whatsapp(phone: str, channel_id: str):
 if __name__ == "__main__":
     import uvicorn
     
-    # Obtenemos el puerto que Render nos exige usar
     port = int(os.getenv("PORT", 8000))
     
-    # Obtenemos la app web interna de FastMCP
-    asgi_app = getattr(mcp, "_app", mcp)
-    
-    # Forzamos a Uvicorn a exponerla en 0.0.0.0 para que Render la detecte
-    uvicorn.run(asgi_app, host="0.0.0.0", port=port)
+    # Extraemos la aplicación web interna (FastAPI/Starlette) de FastMCP
+    asgi_app = None
+    if hasattr(mcp, "streamable_http_app"):
+        asgi_app = mcp.streamable_http_app()
+    elif hasattr(mcp, "get_asgi_app"):
+        asgi_app = mcp.get_asgi_app()
+    elif hasattr(mcp, "_asgi_app"):
+        asgi_app = mcp._asgi_app
+    elif hasattr(mcp, "app"):
+        asgi_app = mcp.app
+        
+    if not asgi_app:
+        print("Error crítico: No se encontró la aplicación web dentro de FastMCP.")
+    else:
+        # Levantamos el servidor en 0.0.0.0
+        uvicorn.run(asgi_app, host="0.0.0.0", port=port)
