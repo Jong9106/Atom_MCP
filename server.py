@@ -23,7 +23,7 @@ def get_headers():
     }
 
 @mcp.tool()
-async def buscar_contactos(phone: str = "", page: int = 1, size: int = 10):
+async def buscar_contactos(phone: str = ""):
     """Busca contactos en Atomchat."""
     params = {}
     if phone: params["phone"] = phone
