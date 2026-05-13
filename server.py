@@ -44,6 +44,5 @@ async def iniciar_llamada_whatsapp(phone: str, channel_id: str):
         return response.json()
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 8000))
-    # Eliminamos el argumento host que causaba el conflicto
-    mcp.run(transport="sse", port=port)
+    # FastMCP detecta el puerto automáticamente desde las variables de entorno de Render
+    mcp.run(transport="sse")
