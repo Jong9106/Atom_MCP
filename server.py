@@ -17,14 +17,16 @@ def get_headers():
     }
 
 @mcp.tool()
-async def buscar_contactos(phone: Optional[str] = None, page: int = 1, size: int = 10):
-    """Busca contactos en Atomchat por teléfono o paginación."""
-    params = {"page": page, "size": size}
+async def buscar_contactos(phone: Optional[str] = None, page: int = 1, size: int = 10, sort: str = "desc"):
+    """Busca contactos en Atomchat por teléfono o paginación. 
+    El parámetro sort puede ser 'asc' o 'desc' (por defecto 'desc' para ver los más recientes)."""
+    params = {"page": page, "size": size, "sort": sort}
     if phone: params["phone"] = phone
     
     async with httpx.AsyncClient() as client:
         response = await client.get(f"{BASE_URL}/clients/", headers=get_headers(), params=params)
         return response.json()
+
 
 @mcp.tool()
 async def listar_llamadas(page: int = 1, size: int = 10):
