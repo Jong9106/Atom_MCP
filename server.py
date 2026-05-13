@@ -7,7 +7,10 @@ from mcp.server.fastmcp import FastMCP
 mcp = FastMCP("Atomchat_Public_Server")
 
 # Configuración base desde la documentación
-BASE_URL = os.getenv("ATOMCHAT_BASE_URL", "https://us-central1-atomchat-io.cloudfunctions.net")
+_base_url = os.getenv("ATOMCHAT_BASE_URL", "https://us-central1-atomchat-io.cloudfunctions.net")
+if not _base_url.startswith(("http://", "https://")):
+    _base_url = f"https://{_base_url}"
+BASE_URL = _base_url.rstrip("/")
 COMPANY_TOKEN = os.getenv("ATOMCHAT_COMPANY_TOKEN", "ce79d131-6f9f-175e-a4f6-d6ed0b53bd57")
 
 def get_headers():
@@ -19,7 +22,7 @@ def get_headers():
 @mcp.tool()
 async def buscar_contactos(phone: Optional[str] = None, page: int = 1, size: int = 10):
     """Busca contactos en Atomchat."""
-    params = {"page": page, "size": size}
+    params = {}
     if phone: params["phone"] = phone
     
     async with httpx.AsyncClient() as client:
