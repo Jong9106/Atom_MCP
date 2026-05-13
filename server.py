@@ -3,7 +3,7 @@ import httpx
 from typing import Optional
 from mcp.server.fastmcp import FastMCP
 
-# Inicializar FastMCP para transporte público (SSE)
+# Inicializar FastMCP
 mcp = FastMCP("Atomchat_Public_Server")
 
 # Configuración base desde la documentación
@@ -17,16 +17,14 @@ def get_headers():
     }
 
 @mcp.tool()
-async def buscar_contactos(phone: Optional[str] = None, page: int = 1, size: int = 10, sort: str = "desc"):
-    """Busca contactos en Atomchat por teléfono o paginación. 
-    El parámetro sort puede ser 'asc' o 'desc' (por defecto 'desc' para ver los más recientes)."""
-    params = {"page": page, "size": size, "sort": sort}
+async def buscar_contactos(phone: Optional[str] = None, page: int = 1, size: int = 10):
+    """Busca contactos en Atomchat."""
+    params = {"page": page, "size": size}
     if phone: params["phone"] = phone
     
     async with httpx.AsyncClient() as client:
         response = await client.get(f"{BASE_URL}/clients/", headers=get_headers(), params=params)
         return response.json()
-
 
 @mcp.tool()
 async def listar_llamadas(page: int = 1, size: int = 10):
@@ -37,7 +35,7 @@ async def listar_llamadas(page: int = 1, size: int = 10):
 
 @mcp.tool()
 async def iniciar_llamada_whatsapp(phone: str, channel_id: str):
-    """Inicia una llamada de WhatsApp al número indicado."""
+    """Inicia una llamada de WhatsApp."""
     payload = {"phone": phone, "channelId": channel_id}
     async with httpx.AsyncClient() as client:
         response = await client.post(f"{BASE_URL}/calls/v1/", headers=get_headers(), json=payload)
@@ -45,22 +43,35 @@ async def iniciar_llamada_whatsapp(phone: str, channel_id: str):
 
 if __name__ == "__main__":
     import uvicorn
-    
+    from starlette.applications import Starlette
+    from starlette.routing import Route
+    from mcp.server.sse import SseServerTransport
+
     port = int(os.getenv("PORT", 8000))
     
-    # Extraemos la aplicación web interna (FastAPI/Starlette) de FastMCP
-    asgi_app = None
-    if hasattr(mcp, "streamable_http_app"):
-        asgi_app = mcp.streamable_http_app()
-    elif hasattr(mcp, "get_asgi_app"):
-        asgi_app = mcp.get_asgi_app()
-    elif hasattr(mcp, "_asgi_app"):
-        asgi_app = mcp._asgi_app
-    elif hasattr(mcp, "app"):
-        asgi_app = mcp.app
-        
-    if not asgi_app:
-        print("Error crítico: No se encontró la aplicación web dentro de FastMCP.")
-    else:
-        # Levantamos el servidor en 0.0.0.0
-        uvicorn.run(asgi_app, host="0.0.0.0", port=port)
+    # 1. Definimos el transporte y la ruta exacta donde la IA enviará los parámetros
+    sse = SseServerTransport("/messages")
+
+    # 2. Manejamos el apretón de manos inicial (Handshake)
+    async def handle_sse(request):
+        async with sse.connect_sse(request.scope, request.receive, request._send) as streams:
+            # Extraemos el motor real oculto dentro de FastMCP
+            internal_server = getattr(mcp, "_mcp_server", getattr(mcp, "server", mcp))
+            await internal_server.run(
+                streams[0], 
+                streams[1], 
+                internal_server.create_initialization_options()
+            )
+
+    # 3. Manejamos la recepción de las variables que mande Claude/Cursor
+    async def handle_messages(request):
+        await sse.handle_post_message(request.scope, request.receive, request._send)
+
+    # 4. Creamos las dos rutas EXACTAS que los agentes de IA necesitan
+    app = Starlette(routes=[
+        Route("/sse", endpoint=handle_sse),
+        Route("/messages", endpoint=handle_messages, methods=["POST"])
+    ])
+
+    # 5. Lanzamos el servidor en el puerto correcto de Render
+    uvicorn.run(app, host="0.0.0.0", port=port)
