@@ -44,5 +44,13 @@ async def iniciar_llamada_whatsapp(phone: str, channel_id: str):
         return response.json()
 
 if __name__ == "__main__":
-    # FastMCP detecta el puerto automáticamente desde las variables de entorno de Render
-    mcp.run(transport="sse")
+    import uvicorn
+    
+    # Obtenemos el puerto que Render nos exige usar
+    port = int(os.getenv("PORT", 8000))
+    
+    # Obtenemos la app web interna de FastMCP
+    asgi_app = getattr(mcp, "_app", mcp)
+    
+    # Forzamos a Uvicorn a exponerla en 0.0.0.0 para que Render la detecte
+    uvicorn.run(asgi_app, host="0.0.0.0", port=port)
