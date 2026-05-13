@@ -2,6 +2,9 @@ import os
 import httpx
 from typing import Optional
 from mcp.server.fastmcp import FastMCP
+from starlette.applications import Starlette
+from starlette.routing import Route
+from mcp.server.sse import SseServerTransport
 
 # Inicializar FastMCP
 mcp = FastMCP("Atomchat_Public_Server")
@@ -44,37 +47,33 @@ async def iniciar_llamada_whatsapp(phone: str, channel_id: str):
         response = await client.post(f"{BASE_URL}/calls/v1/", headers=get_headers(), json=payload)
         return response.json()
 
+# 1. Definimos el transporte y la ruta exacta donde la IA enviará los parámetros
+sse = SseServerTransport("/messages")
+
+# 2. Manejamos el apretón de manos inicial (Handshake)
+async def handle_sse(request):
+    async with sse.connect_sse(request.scope, request.receive, request._send) as streams:
+        # Extraemos el motor real oculto dentro de FastMCP
+        internal_server = getattr(mcp, "_mcp_server", getattr(mcp, "server", mcp))
+        await internal_server.run(
+            streams[0], 
+            streams[1], 
+            internal_server.create_initialization_options()
+        )
+
+# 3. Manejamos la recepción de las variables que mande Claude/Cursor
+async def handle_messages(request):
+    await sse.handle_post_message(request.scope, request.receive, request._send)
+
+# 4. Creamos las dos rutas EXACTAS que los agentes de IA necesitan
+app = Starlette(routes=[
+    Route("/", endpoint=lambda _: Starlette.responses.JSONResponse({"status": "ok"})),
+    Route("/sse", endpoint=handle_sse),
+    Route("/messages", endpoint=handle_messages, methods=["POST"])
+])
+
 if __name__ == "__main__":
     import uvicorn
-    from starlette.applications import Starlette
-    from starlette.routing import Route
-    from mcp.server.sse import SseServerTransport
-
     port = int(os.getenv("PORT", 8000))
-    
-    # 1. Definimos el transporte y la ruta exacta donde la IA enviará los parámetros
-    sse = SseServerTransport("/messages")
-
-    # 2. Manejamos el apretón de manos inicial (Handshake)
-    async def handle_sse(request):
-        async with sse.connect_sse(request.scope, request.receive, request._send) as streams:
-            # Extraemos el motor real oculto dentro de FastMCP
-            internal_server = getattr(mcp, "_mcp_server", getattr(mcp, "server", mcp))
-            await internal_server.run(
-                streams[0], 
-                streams[1], 
-                internal_server.create_initialization_options()
-            )
-
-    # 3. Manejamos la recepción de las variables que mande Claude/Cursor
-    async def handle_messages(request):
-        await sse.handle_post_message(request.scope, request.receive, request._send)
-
-    # 4. Creamos las dos rutas EXACTAS que los agentes de IA necesitan
-    app = Starlette(routes=[
-        Route("/sse", endpoint=handle_sse),
-        Route("/messages", endpoint=handle_messages, methods=["POST"])
-    ])
-
-    # 5. Lanzamos el servidor en el puerto correcto de Render
+    # 5. Lanzamos el servidor en el puerto correcto
     uvicorn.run(app, host="0.0.0.0", port=port)
