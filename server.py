@@ -91,15 +91,52 @@ app = Starlette(routes=[
 ])
 
 if __name__ == "__main__":
-    import uvicorn
-    import sys
+    # --- Lógica Dual Inteligente (STDIO o SSE) ---
+    
+    # Intentamos obtener el puerto. Railway SIEMPRE inyecta 'PORT'.
+    port_env = os.getenv("PORT")
+    
+    # Si hay puerto O se forzó con --sse, corremos el modo Nube (Render/Railway)
+    if port_env or "--sse" in sys.argv:
+        import uvicorn
+        
+        # Si no hay port_env pero se usó --sse localmente, usamos 8000 por defecto
+        port = int(port_env) if port_env else 8000
+        
+        print(f"Iniciando servidor web SSE en el puerto {port}...")
+        
+        sse = SseServerTransport("/messages")
 
-    # Si se detecta PORT (Render) o el argumento --sse, iniciamos el servidor web
-    if os.getenv("PORT") or "--sse" in sys.argv:
-        port = int(os.getenv("PORT", 8000))
-        print(f"Iniciando servidor SSE en el puerto {port}...")
+        async def app(scope, receive, send):
+            if scope["type"] == "http":
+                path = scope["path"]
+                
+                if path == "/sse":
+                    async with sse.connect_sse(scope, receive, send) as streams:
+                        internal_server = getattr(mcp, "_mcp_server", getattr(mcp, "_server", getattr(mcp, "server", mcp)))
+                        await internal_server.run(
+                            streams[0], 
+                            streams[1], 
+                            internal_server.create_initialization_options()
+                        )
+                
+                elif path == "/messages" and scope["method"] == "POST":
+                    await sse.handle_post_message(scope, receive, send)
+                
+                else:
+                    await send({
+                        "type": "http.response.start",
+                        "status": 404,
+                        "headers": [(b"content-type", b"text/plain")],
+                    })
+                    await send({
+                        "type": "http.response.body",
+                        "body": b"Not Found",
+                    })
+
         uvicorn.run(app, host="0.0.0.0", port=port)
+        
     else:
-        # Por defecto, iniciamos en modo STDIO (Local)
+        # Modo Local (STDIO)
         print("Iniciando servidor en modo STDIO (Local)...")
         mcp.run()
