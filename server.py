@@ -1,5 +1,6 @@
 import os
 import httpx
+import json
 from mcp.server.fastmcp import FastMCP
 from mcp.server.sse import SseServerTransport
 from starlette.applications import Starlette
@@ -48,17 +49,18 @@ async def iniciar_llamada_whatsapp(phone: str, channel_id: str):
 
 @mcp.tool()
 async def enviar_plantilla(phone: str, template_name: str, vars: str = ""):
-    """Envía una plantilla de WhatsApp. 'vars' debe ser una cadena separada por comas."""
-    # Convertimos las variables en una lista si existen
-    variables = [v.strip() for v in vars.split(",")] if vars else []
+    """Envía una plantilla de WhatsApp. 'vars' debe ser un JSON string con las variables (ej: '{"first_name": "Luis"}')."""
     
     payload = {
         "phoneNumber": phone,
         "templateId": template_name,
     }
     
-    if variables:
-        payload["variables"] = variables
+    if vars:
+        try:
+            payload["params"] = json.loads(vars)
+        except Exception:
+            pass # Si falla el JSON, se envia sin parametros o se delega el error a la API
         
     # Usamos el token del canal para este endpoint específico
     headers = {

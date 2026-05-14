@@ -12,10 +12,13 @@ async def send_template():
     
     payload = {
         "phoneNumber": "573103232870",
-        "templateId": "dc ind"
+        "templateId": "tVEmzzycCyPwW0f1Ufkx",
+        "params": {
+            "first_name": "Cliente"
+        }
     }
     
-    print(f"Enviando plantilla 'dc ind' a 573103232870...")
+    print(f"Enviando plantilla 'tVEmzzycCyPwW0f1Ufkx' a 573103232870...")
     
     async with httpx.AsyncClient() as client:
         try:
