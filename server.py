@@ -1,12 +1,14 @@
 import os
 import httpx
-# Eliminamos Optional por sugerencia de Antigravity para evitar conflictos en el puente
 from mcp.server.fastmcp import FastMCP
+from mcp.server.sse import SseServerTransport
+from starlette.applications import Starlette
+from starlette.routing import Route
 
 # Inicializar FastMCP
 mcp = FastMCP("Atomchat_Public_Server")
 
-# Configuración base desde la documentación
+# Configuración base
 BASE_URL = os.getenv("ATOMCHAT_BASE_URL", "https://us-central1-atomchat-io.cloudfunctions.net")
 COMPANY_TOKEN = os.getenv("ATOMCHAT_COMPANY_TOKEN", "ce79d131-6f9f-175e-a4f6-d6ed0b53bd57")
 
@@ -19,7 +21,6 @@ def get_headers():
 @mcp.tool()
 async def buscar_contactos(phone: str = ""):
     """Busca contactos en Atomchat. Para buscar uno especifico, envia el phone."""
-    # Eliminamos 'page' y 'size' de aquí porque la API de clientes los rechaza
     params = {}
     if phone != "":
         params["phone"] = phone
@@ -31,7 +32,6 @@ async def buscar_contactos(phone: str = ""):
 @mcp.tool()
 async def listar_llamadas(size: str = "10"):
     """Lista las últimas llamadas de la empresa."""
-    # Usamos string plano para el parámetro y lo convertimos a entero internamente
     params = {"size": int(size)}
     async with httpx.AsyncClient() as client:
         response = await client.get(f"{BASE_URL}/calls/v1/", headers=get_headers(), params=params)
@@ -45,44 +45,39 @@ async def iniciar_llamada_whatsapp(phone: str, channel_id: str):
         response = await client.post(f"{BASE_URL}/calls/v1/", headers=get_headers(), json=payload)
         return response.json()
 
+# --- Configuración de Transportes (Dual: STDIO + SSE) ---
+
+sse = SseServerTransport("/messages")
+
+async def handle_sse(request):
+    async with sse.connect_sse(request.scope, request.receive, request._send) as streams:
+        # Usamos el motor interno oficial de FastMCP
+        await mcp.server.run(
+            streams[0],
+            streams[1],
+            mcp.server.create_initialization_options()
+        )
+
+async def handle_messages(request):
+    await sse.handle_post_message(request.scope, request.receive, request._send)
+
+# Aplicación Starlette para SSE (Render)
+app = Starlette(routes=[
+    Route("/", endpoint=lambda _: Starlette.responses.JSONResponse({"status": "ok", "transport": "sse"})),
+    Route("/sse", endpoint=handle_sse),
+    Route("/messages", endpoint=handle_messages, methods=["POST"])
+])
+
 if __name__ == "__main__":
     import uvicorn
-    from mcp.server.sse import SseServerTransport
+    import sys
 
-    port = int(os.getenv("PORT", 8000))
-    sse = SseServerTransport("/messages")
-
-    # Enrutador crudo (Raw ASGI): A prueba de balas, sin intermediarios.
-    async def app(scope, receive, send):
-        if scope["type"] == "http":
-            path = scope["path"]
-            
-            # Ruta GET para abrir el túnel
-            if path == "/sse":
-                async with sse.connect_sse(scope, receive, send) as streams:
-                    # Buscamos el motor interno de FastMCP sin importar su versión
-                    internal_server = getattr(mcp, "_mcp_server", getattr(mcp, "_server", getattr(mcp, "server", mcp)))
-                    await internal_server.run(
-                        streams[0], 
-                        streams[1], 
-                        internal_server.create_initialization_options()
-                    )
-            
-            # Ruta POST para recibir las peticiones de la IA
-            elif path == "/messages" and scope["method"] == "POST":
-                await sse.handle_post_message(scope, receive, send)
-            
-            # Cualquier otra ruta devuelve 404 limpio
-            else:
-                await send({
-                    "type": "http.response.start",
-                    "status": 404,
-                    "headers": [(b"content-type", b"text/plain")],
-                })
-                await send({
-                    "type": "http.response.body",
-                    "body": b"Not Found",
-                })
-
-    # Levantamos Uvicorn usando nuestra aplicación cruda
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    # Si se detecta PORT (Render) o el argumento --sse, iniciamos el servidor web
+    if os.getenv("PORT") or "--sse" in sys.argv:
+        port = int(os.getenv("PORT", 8000))
+        print(f"Iniciando servidor SSE en el puerto {port}...")
+        uvicorn.run(app, host="0.0.0.0", port=port)
+    else:
+        # Por defecto, iniciamos en modo STDIO (Local)
+        print("Iniciando servidor en modo STDIO (Local)...")
+        mcp.run()
