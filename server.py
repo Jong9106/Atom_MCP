@@ -81,9 +81,11 @@ async def handle_sse(request):
 async def handle_messages(request):
     await sse.handle_post_message(request.scope, request.receive, request._send)
 
+from starlette.responses import JSONResponse
+
 # Aplicación Starlette para SSE (Render)
 app = Starlette(routes=[
-    Route("/", endpoint=lambda _: Starlette.responses.JSONResponse({"status": "ok", "transport": "sse"})),
+    Route("/", endpoint=lambda _: JSONResponse({"status": "ok", "transport": "sse"})),
     Route("/sse", endpoint=handle_sse),
     Route("/messages", endpoint=handle_messages, methods=["POST"])
 ])
