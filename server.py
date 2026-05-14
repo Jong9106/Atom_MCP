@@ -45,6 +45,23 @@ async def iniciar_llamada_whatsapp(phone: str, channel_id: str):
         response = await client.post(f"{BASE_URL}/calls/v1/", headers=get_headers(), json=payload)
         return response.json()
 
+@mcp.tool()
+async def enviar_plantilla(phone: str, template_name: str, vars: str = ""):
+    """Envía una plantilla de WhatsApp. 'vars' debe ser una cadena separada por comas."""
+    # Convertimos las variables en una lista si existen
+    variables = [v.strip() for v in vars.split(",")] if vars else []
+    
+    payload = {
+        "phone": phone,
+        "templateName": template_name,
+        "variables": variables
+    }
+    
+    async with httpx.AsyncClient() as client:
+        # Usamos el endpoint estándar de mensajería de Atomchat
+        response = await client.post(f"{BASE_URL}/messages/v1/sendTemplate", headers=get_headers(), json=payload)
+        return response.json()
+
 # --- Configuración de Transportes (Dual: STDIO + SSE) ---
 
 sse = SseServerTransport("/messages")
