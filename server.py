@@ -11,6 +11,7 @@ mcp = FastMCP("Atomchat_Public_Server")
 # Configuración base
 BASE_URL = os.getenv("ATOMCHAT_BASE_URL", "https://us-central1-atomchat-io.cloudfunctions.net")
 COMPANY_TOKEN = os.getenv("ATOMCHAT_COMPANY_TOKEN", "ce79d131-6f9f-175e-a4f6-d6ed0b53bd57")
+CHANNEL_PUBLIC_TOKEN = os.getenv("ATOMCHAT_CHANNEL_PUBLIC_TOKEN", "1be8ec5c-b3ab-ec0b-f822-a234c9d70f8f")
 
 def get_headers():
     return {
@@ -46,23 +47,28 @@ async def iniciar_llamada_whatsapp(phone: str, channel_id: str):
         return response.json()
 
 @mcp.tool()
-async def enviar_plantilla(phone: str, template_name: str, channel_id: str = "", vars: str = ""):
+async def enviar_plantilla(phone: str, template_name: str, vars: str = ""):
     """Envía una plantilla de WhatsApp. 'vars' debe ser una cadena separada por comas."""
     # Convertimos las variables en una lista si existen
     variables = [v.strip() for v in vars.split(",")] if vars else []
     
     payload = {
-        "phone": phone,
-        "templateName": template_name,
-        "variables": variables
+        "phoneNumber": phone,
+        "templateId": template_name,
     }
     
-    if channel_id:
-        payload["channelId"] = channel_id
+    if variables:
+        payload["variables"] = variables
+        
+    # Usamos el token del canal para este endpoint específico
+    headers = {
+        "Authorization": f"Bearer {CHANNEL_PUBLIC_TOKEN}",
+        "Content-Type": "application/json"
+    }
     
     async with httpx.AsyncClient() as client:
-        # Usamos el endpoint estándar de mensajería de Atomchat
-        response = await client.post(f"{BASE_URL}/messages/v1/sendTemplate", headers=get_headers(), json=payload)
+        # Endpoint correcto según la documentación
+        response = await client.post(f"{BASE_URL}/templates/", headers=headers, json=payload)
         return response.json()
 
 # --- Configuración de Transportes (Dual: STDIO + SSE) ---
