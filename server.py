@@ -1,12 +1,12 @@
 import os
 import httpx
-from typing import Optional
+# Eliminamos Optional por sugerencia de Antigravity para evitar conflictos en el puente
 from mcp.server.fastmcp import FastMCP
 
 # Inicializar FastMCP
 mcp = FastMCP("Atomchat_Public_Server")
 
-# Configuración base desde la documentación (Actualizada)
+# Configuración base desde la documentación
 BASE_URL = os.getenv("ATOMCHAT_BASE_URL", "https://us-central1-atomchat-io.cloudfunctions.net")
 COMPANY_TOKEN = os.getenv("ATOMCHAT_COMPANY_TOKEN", "ce79d131-6f9f-175e-a4f6-d6ed0b53bd57")
 
@@ -17,25 +17,29 @@ def get_headers():
     }
 
 @mcp.tool()
-async def buscar_contactos(phone: Optional[str] = None, page: int = 1, size: int = 10):
-    """Busca contactos en Atomchat."""
-    params = {"page": page, "size": size}
-    if phone: params["phone"] = phone
+async def buscar_contactos(phone: str = ""):
+    """Busca contactos en Atomchat. Para buscar uno especifico, envia el phone."""
+    # Eliminamos 'page' y 'size' de aquí porque la API de clientes los rechaza
+    params = {}
+    if phone != "":
+        params["phone"] = phone
     
     async with httpx.AsyncClient() as client:
         response = await client.get(f"{BASE_URL}/clients/", headers=get_headers(), params=params)
         return response.json()
 
 @mcp.tool()
-async def listar_llamadas(page: int = 1, size: int = 10):
-    """Lista las llamadas de la empresa con paginación."""
+async def listar_llamadas(size: str = "10"):
+    """Lista las últimas llamadas de la empresa."""
+    # Usamos string plano para el parámetro y lo convertimos a entero internamente
+    params = {"size": int(size)}
     async with httpx.AsyncClient() as client:
-        response = await client.get(f"{BASE_URL}/calls/v1/", headers=get_headers(), params={"page": page, "size": size})
+        response = await client.get(f"{BASE_URL}/calls/v1/", headers=get_headers(), params=params)
         return response.json()
 
 @mcp.tool()
 async def iniciar_llamada_whatsapp(phone: str, channel_id: str):
-    """Inicia una llamada de WhatsApp."""
+    """Inicia una llamada de WhatsApp al número indicado."""
     payload = {"phone": phone, "channelId": channel_id}
     async with httpx.AsyncClient() as client:
         response = await client.post(f"{BASE_URL}/calls/v1/", headers=get_headers(), json=payload)
