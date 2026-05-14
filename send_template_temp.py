@@ -1,10 +1,9 @@
 import asyncio
 import httpx
 import os
-import json
 
-BASE_URL = "https://us-central1-atomchat-io.cloudfunctions.net"
-COMPANY_TOKEN = "ce79d131-6f9f-175e-a4f6-d6ed0b53bd57"
+BASE_URL = os.getenv("ATOMCHAT_BASE_URL", "https://us-central1-atomchat-io.cloudfunctions.net")
+COMPANY_TOKEN = os.getenv("ATOMCHAT_COMPANY_TOKEN", "ce79d131-6f9f-175e-a4f6-d6ed0b53bd57")
 
 async def send_template():
     headers = {
@@ -19,10 +18,13 @@ async def send_template():
         "variables": []
     }
     
-    print(f"Sending template...")
+    print(f"Enviando plantilla 'dc ind' a 573103232870 desde canal +573217526510...")
+    
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.post(f"{BASE_URL}/messages/v1/sendTemplate", headers=headers, json=payload)
+            # Reusing the endpoint from server.py which is what we defined
+            url = f"{BASE_URL}/messages/v1/sendTemplate"
+            response = await client.post(url, headers=headers, json=payload)
             print(f"Status Code: {response.status_code}")
             print(f"Response: {response.text}")
         except Exception as e:
